@@ -1,0 +1,145 @@
+ /* RUNGREP: REXX CLIST to call PCR2GREP */
+ /* Run pcre2grep tests. The assumption is that the PCRE2 tests check
+    the library itself. What we are checking here is the file handling
+    and options that are supported by pcre2grep. This script must be
+    run in the build directory. */
+
+/*           Copyright (c) 2020 Ze'ev Atlas
+
+-----------------------------------------------------------------------
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in
+      the documentation and/or other materials provided with the
+      distribution.
+
+    * Neither the name of the University of Cambridge nor the names of
+      its contributors may be used to endorse or promote products
+      derived from this software without specific prior written
+      permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-----------------------------------------------------------------------
+*/
+ /* DD allocation: Association of standard streams with ddnames
+    Standard stream  ddname    Alternate ddname
+    stdin            SYSIN     none
+    stdout           SYSPRINT  SYSTERM, SYSERR
+    stderr           MSGFILE.  [For AMODE 64 app. stderr is SYSOUT]
+                     and there is no alternate ddname.  */
+
+  /******************************************************************
+   https://www.ibm.com/support/knowledgecenter/SSLTBW_2.3.0/com.ibm.
+   zos.v2r3.ikja300/ikja30033.htm
+   ******************************************************************/
+
+  final_rc = 0
+  n = 0
+  PARSE ARG HIGHLEVEL
+  "EXECIO * DISKR SYSIN (STEM REC. FINIS"
+  if rc<>0 then call DIE rc,"problems reading file SYSIN"
+  delim = '>'
+
+  do i=1 by 1 to rec.0
+     parse var rec.i action ':' command
+     select
+        when action = 'TITLE' then
+             ADDRESS LINKMVS "ECHO command"
+        when action = 'TEST' then
+        do
+             ADDRESS LINKMVS "PCR2GREP command"
+             myrc = "RC=" || RC
+             ADDRESS LINKMVS  "ECHO myrc"
+        end
+        when action = 'CREATE' then
+        do
+            n = n+1
+            parse var command str1 (delim) tmpfile
+            tmpfile = HIGHLEVEL || '.' || tmpfile
+            call bpxwdyn "free fi(OUT" || n || ")"
+            T1 = "DD(OUT" || n || ") ",
+                "DA('" || tmpfile || "') UNIT(SYSDA) ",
+                "SPACE(1,1) dsorg(ps) recfm(vb) new reuse catalog ",
+                "lrecl(4096) blksize(0)"
+            say "T1 " t1
+            CALL 'BPXWDYN' T1
+            RC1 = result
+            say "RC1=" rc1
+
+            IF RC1=0 THEN
+            DO
+               if index(str1, 'PCRE2.') > 0 then
+               do
+               /*-------------------------------*/
+                  str1 = HIGHLEVEL || '.' || str1
+                  call bpxwdyn "free fi(IN" || n || ")"
+                  N1 = "DD(IN" || n || ") ",
+                      "DA('" || str1 || "') SHR REUSE"
+                  say "N1 " N1
+                  CALL 'BPXWDYN' N1
+                  RCN1 = result
+                  say "RCN1=" rcn1
+                  IF RC1=0 THEN
+                  DO
+                    /* Read into stem, then write to OUTn */
+                    "execio * diskr in" || n || " (stem stmin."
+                    /*"EXECIO * DISKW OUT" || n || " (STEM stmin."*/
+                    do  k = 1 to stmin.0
+                        push  stmin.k
+                    end
+                    "EXECIO * DISKW OUT" || n
+                    "execio 0 diskw out" || n
+                  end
+               /*-------------------------------*/
+               end
+               else
+               do
+                   PUSH str1
+                   "EXECIO 1 DISKW OUT" || n
+                   "execio 0 diskw out" || n
+               end
+            END
+        end
+        otherwise
+             if rec.i <>  ' ' then
+                say action 'NOT YET IMPLEMENTED'
+     end
+  end
+  call EXITCMD
+
+ DIE:
+   parse arg msg vrc .
+   say "RUNGREP-001" || msg vrc
+
+   final_RC = vrc
+   call EXITCMD
+
+   return
+
+ EXITCMD:
+    /* To show the return code when running in ispf */
+    If Final_RC = 0 Then
+       Do
+         Say "RUNGREP-005 Successful Completion "
+       End
+    Else
+       Say "RUNGREP-006 Unsuccessful Completion " final_rc
+    Exit Final_RC
+
+   Return

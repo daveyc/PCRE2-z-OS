@@ -1,0 +1,104 @@
+ /* REXX */
+ /* GREPMEM: REXX CLIST TO CALL PCR2GREP */
+ /* SUPPLY
+  * OPTION:...
+  * PATTERN:...
+  * FILELIST:FILE1 FILE2 PDS(WILDCARD)... ETC. */
+ /* This program is still WIP if you see this comment line */
+  /******************************************************************
+   https://www.ibm.com/support/knowledgecenter/SSLTBW_2.3.0/com.ibm.
+   zos.v2r3.ikja300/ikja30033.htm
+   ******************************************************************/
+
+ /*A00_OPTIONAL:*/
+   "execio * diskr TRANSLAT (stem parmin. finis"
+   p=0
+   if parmin.0 > 0 then
+   do
+      tistr = ''
+      tostr = ''
+      p = 1
+      do while p \> parmin.0
+         parse var parmin.p pi po
+          interpret "ti=" pi
+          interpret "to=" po
+          tistr=tistr || ti
+          tostr=tostr || to
+          p = p+1
+      end
+   end
+
+  /*return*/
+
+  final_rc = 0
+  "EXECIO * DISKR SYSIN (STEM REC. FINIS"
+  if rc<>0 then call DIE rc,"problems reading file SYSIN"
+  /*"FREE F(SYSIN)"*/
+
+  do i=1 by 1 to rec.0
+      if p > 0 then
+      do
+            iline = translate(iline,tostr,tistr)
+      end
+     parse var rec.i action ':' command
+     select
+        WHEN ACTION = 'OPTION' THEN
+             PARM.OPTION =  COMMAND
+        WHEN ACTION = 'PATTERN' THEN
+             PARM.PATTERN = COMMAND
+        WHEN ACTION = 'FILELIST' then
+        do
+ /* ---------------------- */
+           strout = ''
+           do j = 1 to WORDS(command)
+              file=WORD(command,j)
+              /* file does not contain asterisks */
+              if index(file, '*') < 1 then
+                 strout = strout file
+              else
+              do
+                 parse var lib '(' mem ')'
+                 R_C = MEMLIST('''' || lib || '''', mem, 'STEMNAME.')
+                 IF  R_C      /= 0 THEN SAY R_C
+                 ELSE
+                 DO R = 1 TO STEMNAME.0
+                    strout = strout lib || '(' || STEMNAME.R || ')'
+                 end
+              END
+
+              DROP STEMNAME.
+           end
+           say strout
+ /* ---------------------- */
+           final_command = parm.option parm,command strout
+           ADDRESS LINKMVS "PCR2GREP final_command"
+           myrc = "RC=" || RC
+           ADDRESS LINKMVS  "ECHO myrc"
+        end
+        otherwise
+             if rec.i <>  ' ' then
+                say action 'Unknown action'
+     end
+  end
+  call EXITCMD
+
+ DIE:
+   parse arg msg vrc .
+   say "GREPMEM-001" || msg vrc
+
+   final_RC = vrc
+   call EXITCMD
+
+   return
+
+ EXITCMD:
+    /* To show the return code when running in ispf */
+    If Final_RC = 0 Then
+       Do
+         Say "GREPMEM-005 Successful Completion "
+       End
+    Else
+       Say "GREPMEM-006 Unsuccessful Completion " final_rc
+    Exit Final_RC
+
+   Return

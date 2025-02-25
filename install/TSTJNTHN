@@ -1,0 +1,92 @@
+/*REXX  one str vs two different reg_ex*/
+
+
+the_str1 = "x@79@@79@SET local_disb_counts csa"||,
+         "_generic_work_set generic_integer_15"||,
+         " TO 7777@81@@81@SET local_refund_counts"||,
+         " csa_generic_work_set generic_integer_15 TO 0@83@"
+
+reg_ex  = "@([0-9]+)@[¬@]*?SET ([¬@]*?) TO [¬@]*?"||,
+         "@[0-9]+@@[0-9]+@[¬@]*?SET (\2) TO [¬@]*?@([0-9]+)@"
+reg_ex1 = "@([0-9]+)@[¬@]*?SET ([¬@]*?) TO [¬@]*?"||,
+         "@[0-9]+@@[0-9]+@ SET (\2) TO [¬@]*?@([0-9]+)@"
+
+reg_ex= translate(reg_ex,'^','¬')
+reg_ex1= translate(reg_ex1,'^','¬')
+
+/*my_stem = "WANG" */
+opt_ion = "gi"
+my_stem = "wang"
+
+re_sponse = RXPCRE2('connect','pcre_env',,'')
+if re_sponse \= 0 then exit
+
+
+  re_sponse = RXPCRE2('compile',pcre_env,reg_ex,'pcre_comp',opt_ion)
+
+  if re_sponse \= 0 then exit
+  say 'pcre_comp    = ' pcre_comp
+
+  re_sponse = RXPCRE2('compile',pcre_env,reg_ex1,'pcre_comp1',opt_ion)
+
+  if re_sponse \= 0 then exit
+  say 'pcre_comp1    = ' pcre_comp1
+/* say the_str1 */
+  say '  '
+  say reg_ex
+  say reg_ex1
+  say the_str1
+  if reg_ex = reg_ex1
+  then
+     say "reg_ex same as reg_ex1"
+
+/* note the double comma to tell rexx the parameters are
+   continued on the next line                               */
+
+pcre_exec = RXPCRE2('execute',pcre_env,pcre_comp,,
+                    the_str1,my_stem)
+  say 'pcre_exec    = ' pcre_exec
+
+  say 'wang.0      is  ' wang.0
+  say 'wang_pos.0  is  ' wang_pos.0
+
+  select
+     when pcre_exec = 1 then do
+        say 'wang.0  is  ' wang.0
+        do lo_op_r = 1 to wang.0
+           var_1  =  substr(wang_string.lo_op_r,1,30)
+           var_2  =  substr(wang_pos.lo_op_r,1,10)
+           var_3  =  wang_name.lo_op_r
+           say  var_1 var_2 var_3
+        end
+       end
+     when pcre_exec = 0 then
+        say 'no matches found'
+     Otherwise
+        say 'Error :' pcre_exec
+  end
+
+pcre_exec = RXPCRE2('execute',pcre_env,pcre_comp1,,
+                    the_str1,my_stem)
+  say 'pcre_exec    = ' pcre_exec
+
+  say 'wang.0      is  ' wang.0
+  say 'wang_pos.0  is  ' wang_pos.0
+
+  select
+     when pcre_exec = 1 then do
+        say 'wang.0  is  ' wang.0
+        do lo_op_r = 1 to wang.0
+           var_1  =  substr(wang_string.lo_op_r,1,30)
+           var_2  =  substr(wang_pos.lo_op_r,1,10)
+           var_3  =  wang_name.lo_op_r
+           say  var_1 var_2 var_3
+        end
+       end
+     when pcre_exec = 0 then
+        say 'no matches found'
+     Otherwise
+        say 'Error :' pcre_exec
+  end
+
+exit
